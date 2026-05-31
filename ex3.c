@@ -340,6 +340,11 @@ int main(int argc, char *argv[])
         return 1;
     }
 
+    fprintf(stderr, "[ex3] scheme=%s threads=%d accounts=%d "
+            "transactions=%d read_pct=%d%%\n",
+            scheme_str, num_threads, num_accounts, transactions, read_pct);
+    fprintf(stderr, "[ex3] initialising accounts...\n");
+
     /* Initialise accounts */
     srand(SEED);
     accounts = malloc((size_t)num_accounts * sizeof(int));
@@ -363,6 +368,8 @@ int main(int argc, char *argv[])
         }
     }
 
+    fprintf(stderr, "[ex3] spawning threads...\n");
+
     /* Spawn threads */
     pthread_t *threads = malloc((size_t)num_threads * sizeof(pthread_t));
     bank_args_t *args = malloc((size_t)num_threads * sizeof(bank_args_t));
@@ -379,6 +386,7 @@ int main(int argc, char *argv[])
         pthread_join(threads[t], NULL);
     }
     double elapsed = now() - t0;
+    fprintf(stderr, "[ex3] done (%.6f s)\n", elapsed);
 
     printf("Scheme:        %s\n", scheme_str);
     printf("Threads:       %d\n", num_threads);
