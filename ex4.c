@@ -9,9 +9,14 @@
  * barrier_wait, simulating a synchronisation point. Three barrier flavours
  * are selectable via the CLI:
  *
- *   pthreads   — uses pthread_barrier_t (library baseline)
- *   condvar    — uses a mutex + condition variable (no busy-wait, reusable)
- *   sense      — sense-reversal centralized barrier (spin-wait, reusable)
+ *   pthreads — uses pthread_barrier_t (library baseline, typically well
+ *              optimised by the OS)
+ *   condvar  — mutex + condition variable; blocks waiting threads so they
+ *              do not consume CPU while waiting, at the cost of kernel
+ *              scheduling overhead on wakeup
+ *   sense    — sense-reversal centralised barrier; uses atomic operations
+ *              and busy-spinning, avoiding kernel blocking overhead for
+ *              short waits but wasting CPU when threads outnumber cores
  *
  * Usage:
  *   ./ex4 <num_threads> <iterations> <pthreads|condvar|sense>
@@ -23,8 +28,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <errno.h>
+#include <limits.h>
 #include <time.h>
 #include <pthread.h>
+#include <sched.h>
+
+#define MAX_THREADS    256
+#define MAX_ITERATIONS 100000000
 
 /* -------------------------------------------------------------------------
  * Timing helpers
@@ -56,27 +67,148 @@ typedef enum {
 } barrier_mode_t;
 
 /* -------------------------------------------------------------------------
+ * Input parsing
+ * ---------------------------------------------------------------------- */
+
+/**
+ * @brief Parse a string as a positive integer using strtol.
+ *
+ * @param str   Input string.
+ * @param out   Output value on success.
+ * @param max   Maximum accepted value (inclusive).
+ * @param label Parameter name for error messages.
+ * @return 1 on success, 0 on any error.
+ */
+static int parse_positive_int(const char *str, int *out, int max,
+                              const char *label)
+{
+    if (!str || str[0] == '\0') {
+        fprintf(stderr, "Error: %s is empty\n", label);
+        return 0;
+    }
+
+    char *end;
+    errno = 0;
+    long val = strtol(str, &end, 10);
+
+    if (errno == ERANGE || val > INT_MAX || val < INT_MIN) {
+        fprintf(stderr, "Error: %s '%s' overflows\n", label, str);
+        return 0;
+    }
+
+    if (end == str || *end != '\0') {
+        fprintf(stderr, "Error: %s '%s' is not a valid integer\n", label, str);
+        return 0;
+    }
+
+    if (val <= 0) {
+        fprintf(stderr, "Error: %s must be positive, got %ld\n", label, val);
+        return 0;
+    }
+
+    if (val > max) {
+        fprintf(stderr, "Error: %s %ld exceeds maximum of %d\n",
+                label, val, max);
+        return 0;
+    }
+
+    *out = (int)val;
+    return 1;
+}
+
+/**
+ * @brief Validate and parse all command-line arguments.
+ *
+ * @param argc        Argument count from main.
+ * @param argv        Argument vector from main.
+ * @param num_threads Output: parsed thread count.
+ * @param iterations  Output: parsed iteration count.
+ * @param mode_str    Output: pointer into argv for the mode string.
+ * @param mode        Output: parsed barrier mode enum.
+ * @return 1 if all arguments are valid, 0 otherwise.
+ */
+static int parse_args(int argc, char *argv[], int *num_threads, int *iterations,
+                      const char **mode_str, barrier_mode_t *mode)
+{
+    if (argc != 4) {
+        fprintf(stderr,
+                "Usage: %s <num_threads> <iterations>"
+                " <pthreads|condvar|sense>\n",
+                argv[0]);
+        return 0;
+    }
+
+    if (!parse_positive_int(argv[1], num_threads, MAX_THREADS, "num_threads")) {
+        return 0;
+    }
+
+    if (!parse_positive_int(argv[2], iterations, MAX_ITERATIONS, "iterations")) {
+        return 0;
+    }
+
+    *mode_str = argv[3];
+
+    if (strcmp(*mode_str, "pthreads") == 0) {
+        *mode = BARRIER_PTHREADS;
+    } else if (strcmp(*mode_str, "condvar") == 0) {
+        *mode = BARRIER_CONDVAR;
+    } else if (strcmp(*mode_str, "sense") == 0) {
+        *mode = BARRIER_SENSE;
+    } else {
+        fprintf(stderr,
+                "Error: mode must be 'pthreads', 'condvar', or 'sense',"
+                " got '%s'\n", *mode_str);
+        return 0;
+    }
+
+    return 1;
+}
+
+/* -------------------------------------------------------------------------
+ * Allocation helpers
+ * ---------------------------------------------------------------------- */
+
+/**
+ * @brief Allocate memory and exit on failure.
+ *
+ * @param n    Number of elements.
+ * @param size Size of each element in bytes.
+ * @return Pointer to allocated memory, never NULL.
+ */
+static void *xmalloc(size_t n, size_t size)
+{
+    void *ptr = malloc(n * size);
+    if (!ptr) {
+        fprintf(stderr, "Error: malloc failed for %zu bytes\n", n * size);
+        exit(1);
+    }
+    return ptr;
+}
+
+/* -------------------------------------------------------------------------
  * pthread_barrier — library wrapper
  * ---------------------------------------------------------------------- */
 
 static pthread_barrier_t lib_barrier;
 
 /* -------------------------------------------------------------------------
- * Cond-var barrier (based on pth_cond_bar.c from Pacheco's textbook)
+ * Cond-var barrier
  *
- * Uses a mutex, a condition variable, and a counter. The "sense" phase
- * alternates on each pass so the barrier is safely reusable without a reset.
+ * Uses a mutex, a condition variable, and a counter. The phase alternates
+ * on each pass so the barrier is safely reusable without a reset step.
+ * Waiting threads block inside pthread_cond_wait, releasing the CPU to
+ * other threads. The tradeoff is kernel wakeup latency on each broadcast.
  * ---------------------------------------------------------------------- */
 
 /**
  * @brief Reusable barrier implemented with a mutex and condition variable.
  */
 typedef struct {
-    int count;          /**< Number of threads that must arrive. */
-    int arrived;        /**< Number of threads that have arrived this phase. */
-    int phase;          /**< Current phase (0 or 1); flips each pass. */
+    int count;
+    int arrived;
+    int phase;
     pthread_mutex_t lock;
-    pthread_cond_t  cond;
+    pthread_cond_t cond;
 } condvar_barrier_t;
 
 static condvar_barrier_t cv_barrier;
@@ -110,16 +242,20 @@ static void condvar_barrier_destroy(condvar_barrier_t *b)
 /**
  * @brief Wait at a condvar barrier until all threads have arrived.
  *
- * The last thread to arrive broadcasts and the phase flips so that the
- * barrier is immediately reusable without any reset step.
+ * The last thread to arrive resets the counter, flips the phase, and
+ * broadcasts to release all waiting threads. The phase flip makes the
+ * barrier immediately reusable: threads in the next pass will wait for
+ * the new phase value, so there is no ambiguity between generations.
  *
  * @param b Barrier to wait on.
  */
 static void condvar_barrier_wait(condvar_barrier_t *b)
 {
     pthread_mutex_lock(&b->lock);
+
     int my_phase = b->phase;
     b->arrived++;
+
     if (b->arrived == b->count) {
         b->arrived = 0;
         b->phase = 1 - b->phase;
@@ -129,32 +265,42 @@ static void condvar_barrier_wait(condvar_barrier_t *b)
             pthread_cond_wait(&b->cond, &b->lock);
         }
     }
+
     pthread_mutex_unlock(&b->lock);
 }
 
 /* -------------------------------------------------------------------------
- * Sense-reversal centralized barrier
+ * Sense-reversal centralised barrier
  *
- * Each thread keeps a thread-local sense flag. The barrier has a shared
- * counter and a global sense flag. On each pass, each thread spins until
- * global_sense matches its local sense, then flips its local sense for
- * the next pass. This makes the barrier reusable while using spin-waiting
- * instead of blocking, which is faster when threads outnumber logical cores.
+ * Each thread has a thread-local sense flag. The barrier has an atomic
+ * countdown counter and a global sense flag. On each pass:
+ *
+ *   1. The thread flips its local_sense.
+ *   2. It atomically decrements count.
+ *   3. If it is the last to arrive, it resets count and publishes the new
+ *      global_sense value, releasing all spinning threads.
+ *   4. Otherwise it spins until global_sense matches local_sense.
+ *
+ * The barrier is reusable because local_sense alternates between 0 and 1
+ * on every pass. Threads therefore wait for the sense value of the current
+ * barrier generation, not a stale value from the previous generation.
+ *
+ * This implementation uses atomic operations instead of a mutex for the
+ * arrival counter, so it represents a spin-based atomic barrier.
  * ---------------------------------------------------------------------- */
 
 /**
- * @brief Sense-reversal centralized barrier state.
+ * @brief Sense-reversal centralised barrier state.
  */
 typedef struct {
-    int count;           /**< Total number of participating threads. */
-    volatile int arrived; /**< Atomic counter of threads that have arrived. */
-    volatile int global_sense; /**< Shared sense flag; flips each pass. */
-    pthread_mutex_t count_lock; /**< Protects the arrived counter. */
+    int num_threads;
+    int count;
+    int global_sense;
 } sense_barrier_t;
 
 static sense_barrier_t sense_bar;
 
-/** Thread-local sense flag; starts at 1 and flips each pass. */
+/** Thread-local sense flag; starts at 1 and flips on every barrier pass. */
 static __thread int local_sense = 1;
 
 /**
@@ -165,10 +311,9 @@ static __thread int local_sense = 1;
  */
 static void sense_barrier_init(sense_barrier_t *b, int count)
 {
-    b->count = count;
-    b->arrived = 0;
-    b->global_sense = 0;
-    pthread_mutex_init(&b->count_lock, NULL);
+    b->num_threads = count;
+    __atomic_store_n(&b->count, count, __ATOMIC_RELAXED);
+    __atomic_store_n(&b->global_sense, 0, __ATOMIC_RELAXED);
 }
 
 /**
@@ -178,16 +323,16 @@ static void sense_barrier_init(sense_barrier_t *b, int count)
  */
 static void sense_barrier_destroy(sense_barrier_t *b)
 {
-    pthread_mutex_destroy(&b->count_lock);
+    (void)b;
 }
 
 /**
  * @brief Wait at a sense-reversal barrier until all threads have arrived.
  *
- * Each thread flips its local_sense before incrementing the shared counter.
- * The last arriving thread resets the counter inside the lock, then flips
- * global_sense outside the lock to release all spinners. Resetting arrived
- * before flipping global_sense ensures the barrier is immediately reusable.
+ * The last arriving thread resets the countdown counter and then publishes
+ * the new global_sense value. Other threads spin until global_sense matches
+ * their local_sense. sched_yield() prevents extreme starvation when the
+ * number of threads exceeds the number of logical cores.
  *
  * @param b Barrier to wait on.
  */
@@ -195,22 +340,14 @@ static void sense_barrier_wait(sense_barrier_t *b)
 {
     local_sense = 1 - local_sense;
 
-    pthread_mutex_lock(&b->count_lock);
-    b->arrived++;
-    int all_arrived = (b->arrived == b->count);
-    if (all_arrived) {
-        b->arrived = 0;
-    }
-    pthread_mutex_unlock(&b->count_lock);
+    int remaining = __atomic_sub_fetch(&b->count, 1, __ATOMIC_ACQ_REL);
 
-    if (all_arrived) {
-        /* Reset is complete before we publish the release. */
-        b->global_sense = local_sense;
+    if (remaining == 0) {
+        __atomic_store_n(&b->count, b->num_threads, __ATOMIC_RELAXED);
+        __atomic_store_n(&b->global_sense, local_sense, __ATOMIC_RELEASE);
     } else {
-        while (b->global_sense != local_sense) {
-            /* On single-core machines, yield to allow the last thread
-             * to reach the barrier. On multi-core, this loop is a
-             * busy-spin that resolves without yielding. */
+        while (__atomic_load_n(&b->global_sense, __ATOMIC_ACQUIRE)
+               != local_sense) {
             sched_yield();
         }
     }
@@ -224,15 +361,15 @@ static void sense_barrier_wait(sense_barrier_t *b)
  * @brief Arguments passed to each worker thread.
  */
 typedef struct {
-    int iterations;      /**< Number of barrier passes to perform. */
-    barrier_mode_t mode; /**< Which barrier to use. */
+    int iterations;
+    barrier_mode_t mode;
 } barrier_args_t;
 
 /**
  * @brief Thread worker: loop through N barrier passes.
  *
- * Each iteration calls the appropriate barrier_wait, then continues.
- * The loop body models minimal work so that barrier overhead dominates.
+ * The loop body contains no other work so that barrier overhead dominates
+ * the measurement.
  *
  * @param arg Pointer to barrier_args_t.
  * @return NULL always.
@@ -254,6 +391,7 @@ static void *barrier_worker(void *arg)
             break;
         }
     }
+
     return NULL;
 }
 
@@ -266,51 +404,63 @@ static void *barrier_worker(void *arg)
  *
  * @param argc Argument count.
  * @param argv num_threads, iterations, mode (pthreads|condvar|sense).
- * @return 0 on success, 1 on error.
+ * @return 0 on success, 1 on argument error.
  */
 int main(int argc, char *argv[])
 {
-    if (argc != 4) {
-        fprintf(stderr,
-                "Usage: %s <num_threads> <iterations> <pthreads|condvar|sense>\n",
-                argv[0]);
-        return 1;
-    }
-
-    int num_threads = atoi(argv[1]);
-    int iterations = atoi(argv[2]);
-    const char *mode_str = argv[3];
-
+    int num_threads;
+    int iterations;
+    const char *mode_str;
     barrier_mode_t mode;
-    if (strcmp(mode_str, "pthreads") == 0) {
-        mode = BARRIER_PTHREADS;
-        pthread_barrier_init(&lib_barrier, NULL, (unsigned)num_threads);
-    } else if (strcmp(mode_str, "condvar") == 0) {
-        mode = BARRIER_CONDVAR;
-        condvar_barrier_init(&cv_barrier, num_threads);
-    } else if (strcmp(mode_str, "sense") == 0) {
-        mode = BARRIER_SENSE;
-        sense_barrier_init(&sense_bar, num_threads);
-    } else {
-        fprintf(stderr, "Unknown mode: %s\n", mode_str);
+
+    if (!parse_args(argc, argv, &num_threads, &iterations, &mode_str, &mode)) {
         return 1;
     }
 
-    pthread_t *threads = malloc((size_t)num_threads * sizeof(pthread_t));
-    barrier_args_t *args = malloc((size_t)num_threads * sizeof(barrier_args_t));
+    if (mode == BARRIER_PTHREADS) {
+        pthread_barrier_init(&lib_barrier, NULL, (unsigned)num_threads);
+    } else if (mode == BARRIER_CONDVAR) {
+        condvar_barrier_init(&cv_barrier, num_threads);
+    } else {
+        sense_barrier_init(&sense_bar, num_threads);
+    }
+
+    fprintf(stderr, "[ex4] mode=%s threads=%d iterations=%d\n",
+            mode_str, num_threads, iterations);
+    fprintf(stderr, "[ex4] spawning threads...\n");
+
+    pthread_t *threads = xmalloc((size_t)num_threads, sizeof(pthread_t));
+    barrier_args_t *args = xmalloc((size_t)num_threads,
+                                   sizeof(barrier_args_t));
+
     for (int t = 0; t < num_threads; t++) {
         args[t].iterations = iterations;
         args[t].mode = mode;
     }
 
     double t0 = now();
+
     for (int t = 0; t < num_threads; t++) {
-        pthread_create(&threads[t], NULL, barrier_worker, &args[t]);
+        int rc = pthread_create(&threads[t], NULL, barrier_worker, &args[t]);
+        if (rc != 0) {
+            fprintf(stderr, "Error: pthread_create failed for thread %d: %s\n",
+                    t, strerror(rc));
+            exit(1);
+        }
     }
+
     for (int t = 0; t < num_threads; t++) {
-        pthread_join(threads[t], NULL);
+        int rc = pthread_join(threads[t], NULL);
+        if (rc != 0) {
+            fprintf(stderr, "Error: pthread_join failed for thread %d: %s\n",
+                    t, strerror(rc));
+            exit(1);
+        }
     }
+
     double elapsed = now() - t0;
+
+    fprintf(stderr, "[ex4] done (%.6f s)\n", elapsed);
 
     printf("Mode:          %s\n", mode_str);
     printf("Threads:       %d\n", num_threads);
@@ -319,7 +469,6 @@ int main(int argc, char *argv[])
     printf("Throughput:    %.2f M barrier-passes/s\n",
            (double)num_threads * iterations / elapsed / 1e6);
 
-    /* Cleanup */
     if (mode == BARRIER_PTHREADS) {
         pthread_barrier_destroy(&lib_barrier);
     } else if (mode == BARRIER_CONDVAR) {
@@ -330,5 +479,6 @@ int main(int argc, char *argv[])
 
     free(threads);
     free(args);
+
     return 0;
 }
