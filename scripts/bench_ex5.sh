@@ -1,5 +1,8 @@
 #!/bin/bash
 set -euo pipefail
+
+make bin/ex5
+
 # shellcheck source=lib.sh
 source "$(dirname "$0")/lib.sh"
 
