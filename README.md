@@ -29,7 +29,7 @@
 
 ## Overview
 
-This repository contains the implementation for Handout1 of the Parallel Computing Systems course. It covers six exercises in parallel programming using **Pthreads** and **OpenMP** in C, along with a structured benchmarking and result-averaging pipeline.
+This repository contains the implementation for HW1 of the Parallel Computing Systems course. It covers six exercises in parallel programming using **Pthreads** and **OpenMP** in C, along with a structured benchmarking and result-averaging pipeline.
 
 All programs are written in C11, compiled with GCC, and target the department's Linux cluster (`linux01.di.uoa.gr` through `linux30.di.uoa.gr`).
 
