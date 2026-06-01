@@ -1,6 +1,6 @@
 CC      = gcc
-CFLAGS  = -O2 -Wall -Wextra -Wpedantic -std=c11 -fopenmp
-LDFLAGS = -lpthread -lm
+CFLAGS  = -O2 -Wall -Wextra -Wpedantic -std=c11 -fopenmp -pthread
+LDFLAGS = -fopenmp -pthread -lm
 
 TARGETS = ex1 ex2 ex3 ex4 ex5 ex6
 
@@ -8,22 +8,7 @@ TARGETS = ex1 ex2 ex3 ex4 ex5 ex6
 
 all: $(TARGETS)
 
-ex1: ex1.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-ex2: ex2.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-ex3: ex3.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-ex4: ex4.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-ex5: ex5.c
-	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
-
-ex6: ex6.c
+%: %.c
 	$(CC) $(CFLAGS) -o $@ $< $(LDFLAGS)
 
 clean:
