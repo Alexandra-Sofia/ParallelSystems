@@ -20,13 +20,13 @@ check_output() {
     echo "[smoke] running $name"
     echo "[smoke] command: $cmd"
 
-    output=$(eval "timeout $timeout_sec $cmd" 2>/dev/null || true)
-    echo "$output"
-
-    if [ -z "$output" ]; then
-        echo "[smoke][SKIP] $name — timed out or no output (expected on single-core for sense barrier)"
-        return
+    local output
+    if ! output=$(eval "timeout $timeout_sec $cmd" 2>&1); then
+        echo "$output"
+        echo "[smoke][FAIL] $name timed out or exited with error"
+        exit 1
     fi
+    echo "$output"
 
     if echo "$output" | grep -q "Correctness:"; then
         if ! echo "$output" | grep -q "Correctness:.*OK"; then

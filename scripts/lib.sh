@@ -11,7 +11,7 @@ BINDIR="bin"
 # ---------------------------------------------------------------------------
 
 require_tools() {
-    for tool in bc awk sort; do
+    for tool in awk sort; do
         if ! command -v "$tool" >/dev/null 2>&1; then
             echo "Error: required tool '$tool' is not installed"
             exit 1
@@ -108,7 +108,7 @@ avg_csv() {
             key = key (i > 1 ? "," : "") $kc[i]
         }
         for (i = 1; i <= n_vals; i++) {
-            val_sum[key][i] += $vc[i]
+            val_sum[key SUBSEP i] += $vc[i]
         }
         count[key]++
     }
@@ -116,7 +116,7 @@ avg_csv() {
         for (key in count) {
             printf "%s", key
             for (i = 1; i <= n_vals; i++) {
-                printf ",%.6f", val_sum[key][i] / count[key]
+                printf ",%.6f", val_sum[key SUBSEP i] / count[key]
             }
             printf "\n"
         }

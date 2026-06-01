@@ -1,6 +1,6 @@
 CC      = gcc
-CFLAGS  = -O2 -Wall -Wextra -Wpedantic -std=c11 -fopenmp
-LDFLAGS = -lpthread -lm
+CFLAGS  = -O2 -Wall -Wextra -Wpedantic -std=c11 -fopenmp -pthread
+LDFLAGS = -fopenmp -pthread -lm
 SRCDIR  = src
 BINDIR  = bin
 TARGETS = $(addprefix $(BINDIR)/,ex1 ex2 ex3 ex4 ex5 ex6)
