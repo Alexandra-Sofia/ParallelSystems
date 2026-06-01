@@ -1,194 +1,72 @@
 #!/bin/bash
 set -euo pipefail
+# shellcheck source=lib.sh
+source "$(dirname "$0")/lib.sh"
 
-trap 'echo "[interrupted] cleaning up..."; pkill -P $$ || true; exit 1' INT TERM
+setup_trap
+require_tools
+require_program "./ex5"
 
 REPEATS=4
-PROGRAM="./ex5"
-RESULTS_FILE="bench_ex5_results.csv"
-SYSTEM_FILE="bench_ex5_system.txt"
+RESULTS_DIR="results/ex5"
+RESULTS_FILE="$RESULTS_DIR/bench_ex5_results.csv"
+SYSTEM_FILE="$RESULTS_DIR/bench_ex5_system.txt"
 
-DEFAULT_SIZE=2000
-DEFAULT_SPARSITY=90
-DEFAULT_ITERATIONS=10
-DEFAULT_THREADS=4
+collect_system_info "$SYSTEM_FILE"
 
-THREADS="1 2 4 8"
-SIZES="1000 2000 4000"
-SPARSITIES="0 50 75 90 95 99"
-ITERATIONS_LIST="1 5 10 20"
-
-if [ ! -x "$PROGRAM" ]; then
-    echo "Error: $PROGRAM not found or not executable"
-    echo "Run: make ex5"
-    exit 1
-fi
-
-echo "[bench] collecting system information..."
-
-{
-    echo "Hostname:"
-    hostname
-    echo
-
-    echo "CPU model:"
-    lscpu | grep "Model name" | sed 's/^[ \t]*//'
-    echo
-
-    echo "CPU cores/threads:"
-    lscpu | grep -E "CPU\(s\)|Core\(s\) per socket|Thread\(s\) per core|Socket\(s\)" \
-          | sed 's/^[ \t]*//'
-    echo
-
-    echo "Operating system:"
-    if [ -f /etc/os-release ]; then
-        grep PRETTY_NAME /etc/os-release | cut -d= -f2 | tr -d '"'
-    else
-        uname -a
-    fi
-    echo
-
-    echo "Kernel:"
-    uname -r
-    echo
-
-    echo "Compiler:"
-    gcc --version | head -n 1
-    echo
-
-    echo "Build command:"
-    echo "make ex5"
-    echo
-
-    echo "Benchmark parameters:"
-    echo "Repeats: $REPEATS"
-    echo "Default size: $DEFAULT_SIZE"
-    echo "Default sparsity: $DEFAULT_SPARSITY"
-    echo "Default iterations: $DEFAULT_ITERATIONS"
-    echo "Default threads: $DEFAULT_THREADS"
-    echo "Thread sweep: $THREADS"
-    echo "Size sweep: $SIZES"
-    echo "Sparsity sweep: $SPARSITIES"
-    echo "Iteration sweep: $ITERATIONS_LIST"
-} > "$SYSTEM_FILE"
-
-echo "sweep,size,sparsity,iterations,threads,repeat,nnz,csr_build_serial,csr_build_parallel,csr_spmv_serial,csr_spmv_parallel,dense_spmv_serial,dense_spmv_parallel,csr_total_parallel,dense_total_parallel,csr_vs_dense_including_build,correctness" \
+echo "sweep,size,sparsity,iterations,threads,repeat,\
+csr_build_serial,csr_build_parallel,\
+csr_spmv_serial,csr_spmv_parallel,\
+dense_spmv_serial,dense_spmv_parallel,correctness" \
     > "$RESULTS_FILE"
 
-run_case() {
-    local sweep="$1"
-    local size="$2"
-    local sparsity="$3"
-    local iterations="$4"
-    local threads="$5"
-    local repeat="$6"
-
+run_ex5() {
+    local sweep="$1" size="$2" sparsity="$3" iters="$4" threads="$5" repeat="$6"
     local output
-    output=$("$PROGRAM" "$size" "$sparsity" "$iterations" "$threads")
+    output=$(./ex5 "$size" "$sparsity" "$iters" "$threads")
 
-    local nnz
-    local csr_build_serial
-    local csr_build_parallel
-    local csr_spmv_serial
-    local csr_spmv_parallel
-    local dense_spmv_serial
-    local dense_spmv_parallel
-    local correctness
+    local cbs cbp css csp dss dsp ok
+    cbs=$(echo  "$output" | awk '/CSR build serial/    {print $4}')
+    cbp=$(echo  "$output" | awk '/CSR build parallel/  {print $4}')
+    css=$(echo  "$output" | awk '/CSR SpMV serial/     {print $4}')
+    csp=$(echo  "$output" | awk '/CSR SpMV parallel/   {print $4}')
+    dss=$(echo  "$output" | awk '/Dense SpMV serial/   {print $4}')
+    dsp=$(echo  "$output" | awk '/Dense SpMV parallel/ {print $4}')
+    ok=$(echo   "$output" | awk '/Correctness/         {print $2}' | tr -d '[]')
 
-    nnz=$(echo "$output" | awk '/NNZ:/ {print $2}')
-    csr_build_serial=$(echo "$output" | awk '/CSR build serial/ {print $4}')
-    csr_build_parallel=$(echo "$output" | awk '/CSR build parallel/ {print $4}')
-    csr_spmv_serial=$(echo "$output" | awk '/CSR SpMV serial/ {print $4}')
-    csr_spmv_parallel=$(echo "$output" | awk '/CSR SpMV parallel/ {print $4}')
-    dense_spmv_serial=$(echo "$output" | awk '/Dense SpMV serial/ {print $4}')
-    dense_spmv_parallel=$(echo "$output" | awk '/Dense SpMV parallel/ {print $4}')
-    correctness=$(echo "$output" | awk '/Correctness/ {print $2}' | tr -d '[]')
-
-    if [ -z "$nnz" ] || [ -z "$csr_build_serial" ] || \
-       [ -z "$csr_build_parallel" ] || [ -z "$csr_spmv_serial" ] || \
-       [ -z "$csr_spmv_parallel" ] || [ -z "$dense_spmv_serial" ] || \
-       [ -z "$dense_spmv_parallel" ] || [ -z "$correctness" ]; then
-        echo "Error: failed to parse output"
-        echo "sweep=$sweep size=$size sparsity=$sparsity iterations=$iterations threads=$threads repeat=$repeat"
+    if [ -z "$cbs" ] || [ -z "$ok" ]; then
+        echo "Error: failed to parse output for size=$size sparsity=$sparsity threads=$threads"
         echo "$output"
         exit 1
     fi
 
-    local csr_total_parallel
-    local dense_total_parallel
-    local csr_vs_dense_including_build
-
-    csr_total_parallel=$(awk -v a="$csr_build_parallel" -v b="$csr_spmv_parallel" \
-        'BEGIN { printf "%.6f", a + b }')
-
-    dense_total_parallel="$dense_spmv_parallel"
-
-    csr_vs_dense_including_build=$(awk -v d="$dense_total_parallel" -v c="$csr_total_parallel" \
-        'BEGIN {
-            if (c == 0) {
-                print "NA"
-            } else {
-                printf "%.3f", d / c
-            }
-        }')
-
-    echo "$sweep,$size,$sparsity,$iterations,$threads,$repeat,$nnz,$csr_build_serial,$csr_build_parallel,$csr_spmv_serial,$csr_spmv_parallel,$dense_spmv_serial,$dense_spmv_parallel,$csr_total_parallel,$dense_total_parallel,$csr_vs_dense_including_build,$correctness" \
+    echo "$sweep,$size,$sparsity,$iters,$threads,$repeat,$cbs,$cbp,$css,$csp,$dss,$dsp,$ok" \
         >> "$RESULTS_FILE"
-
-    echo "[bench] sweep=$sweep size=$size sparsity=$sparsity iterations=$iterations threads=$threads repeat=$repeat nnz=$nnz csr_total=$csr_total_parallel dense=$dense_total_parallel speedup=$csr_vs_dense_including_build correctness=$correctness"
+    echo "[bench] sweep=$sweep size=$size sparsity=$sparsity threads=$threads repeat=$repeat csr_spmv_parallel=$csp"
 }
 
+# Sweep 1: vary threads (fixed size=2000, sparsity=90, iters=10)
 echo "[bench] sweep 1: varying threads"
-
-for threads in $THREADS; do
+for threads in 1 2 4 8; do
     for repeat in $(seq 1 "$REPEATS"); do
-        run_case "threads" \
-            "$DEFAULT_SIZE" \
-            "$DEFAULT_SPARSITY" \
-            "$DEFAULT_ITERATIONS" \
-            "$threads" \
-            "$repeat"
+        run_ex5 threads 2000 90 10 "$threads" "$repeat"
     done
 done
 
-echo "[bench] sweep 2: varying matrix size"
-
-for size in $SIZES; do
+# Sweep 2: vary sparsity (fixed size=2000, threads=4, iters=10)
+echo "[bench] sweep 2: varying sparsity"
+for sparsity in 0 50 75 90 99; do
     for repeat in $(seq 1 "$REPEATS"); do
-        run_case "size" \
-            "$size" \
-            "$DEFAULT_SPARSITY" \
-            "$DEFAULT_ITERATIONS" \
-            "$DEFAULT_THREADS" \
-            "$repeat"
+        run_ex5 sparsity 2000 "$sparsity" 10 4 "$repeat"
     done
 done
 
-echo "[bench] sweep 3: varying sparsity"
-
-for sparsity in $SPARSITIES; do
+# Sweep 3: vary matrix size (fixed sparsity=90, threads=4, iters=10)
+echo "[bench] sweep 3: varying size"
+for size in 500 1000 2000 4000; do
     for repeat in $(seq 1 "$REPEATS"); do
-        run_case "sparsity" \
-            "$DEFAULT_SIZE" \
-            "$sparsity" \
-            "$DEFAULT_ITERATIONS" \
-            "$DEFAULT_THREADS" \
-            "$repeat"
-    done
-done
-
-echo "[bench] sweep 4: varying SpMV iterations"
-
-for iterations in $ITERATIONS_LIST; do
-    for repeat in $(seq 1 "$REPEATS"); do
-        run_case "iterations" \
-            "$DEFAULT_SIZE" \
-            "$DEFAULT_SPARSITY" \
-            "$iterations" \
-            "$DEFAULT_THREADS" \
-            "$repeat"
+        run_ex5 size "$size" 90 10 4 "$repeat"
     done
 done
 
 echo "[bench] results written to $RESULTS_FILE"
-echo "[bench] system information written to $SYSTEM_FILE"
