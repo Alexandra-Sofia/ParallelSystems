@@ -3,6 +3,9 @@
 # Shared functions sourced by all bench_exN.sh and avg_exN.sh scripts.
 # Do not execute directly.
 
+# Path to compiled executables, relative to the project root.
+BINDIR="bin"
+
 # ---------------------------------------------------------------------------
 # Guard: abort if required tools are missing
 # ---------------------------------------------------------------------------
@@ -14,6 +17,28 @@ require_tools() {
             exit 1
         fi
     done
+}
+
+# ---------------------------------------------------------------------------
+# Verify the program exists and is executable
+# Usage: require_program <name>   (looks up bin/<name>)
+# ---------------------------------------------------------------------------
+
+require_program() {
+    local name="$1"
+    local path="$BINDIR/$name"
+    if [ ! -x "$path" ]; then
+        echo "Error: $path not found or not executable — run 'make' first"
+        exit 1
+    fi
+}
+
+# ---------------------------------------------------------------------------
+# Standard trap setup — call at the top of each bench script
+# ---------------------------------------------------------------------------
+
+setup_trap() {
+    trap 'echo "[interrupted] cleaning up..."; pkill -P $$ || true; exit 1' INT TERM
 }
 
 # ---------------------------------------------------------------------------
@@ -48,53 +73,6 @@ collect_system_info() {
         gcc --version | head -n 1
     } > "$out"
     echo "[bench] system info written to $out"
-}
-
-# ---------------------------------------------------------------------------
-# Run a program, parse one field from its stdout, accumulate over repeats,
-# and return the average via stdout.
-# Usage: avg_field <program_invocation> <awk_pattern> <repeats>
-# ---------------------------------------------------------------------------
-
-avg_field() {
-    local cmd="$1"
-    local pattern="$2"
-    local repeats="$3"
-    local total=0
-    local val
-
-    for _ in $(seq 1 "$repeats"); do
-        val=$(eval "$cmd" | awk "$pattern")
-        if [ -z "$val" ]; then
-            echo "Error: failed to parse field with pattern '$pattern' from: $cmd" >&2
-            exit 1
-        fi
-        total=$(echo "$total + $val" | bc -l)
-    done
-
-    echo "scale=6; $total / $repeats" | bc -l
-}
-
-# ---------------------------------------------------------------------------
-# Standard trap setup — call at the top of each bench script
-# Usage: setup_trap
-# ---------------------------------------------------------------------------
-
-setup_trap() {
-    trap 'echo "[interrupted] cleaning up..."; pkill -P $$ || true; exit 1' INT TERM
-}
-
-# ---------------------------------------------------------------------------
-# Verify the program exists and is executable
-# Usage: require_program <path>
-# ---------------------------------------------------------------------------
-
-require_program() {
-    local prog="$1"
-    if [ ! -x "$prog" ]; then
-        echo "Error: $prog not found or not executable"
-        exit 1
-    fi
 }
 
 # ---------------------------------------------------------------------------

@@ -5,13 +5,14 @@ source "$(dirname "$0")/lib.sh"
 
 setup_trap
 require_tools
-require_program "./ex5"
+require_program "ex5"
 
 REPEATS=4
 RESULTS_DIR="results/ex5"
 RESULTS_FILE="$RESULTS_DIR/bench_ex5_results.csv"
 SYSTEM_FILE="$RESULTS_DIR/bench_ex5_system.txt"
 
+mkdir -p "$RESULTS_DIR"
 collect_system_info "$SYSTEM_FILE"
 
 echo "sweep,size,sparsity,iterations,threads,repeat,\
@@ -23,21 +24,20 @@ dense_spmv_serial,dense_spmv_parallel,correctness" \
 run_ex5() {
     local sweep="$1" size="$2" sparsity="$3" iters="$4" threads="$5" repeat="$6"
     local output
-    output=$(./ex5 "$size" "$sparsity" "$iters" "$threads")
+    output=$("$BINDIR/ex5" "$size" "$sparsity" "$iters" "$threads")
 
     local cbs cbp css csp dss dsp ok
-    cbs=$(echo  "$output" | awk '/CSR build serial/    {print $4}')
-    cbp=$(echo  "$output" | awk '/CSR build parallel/  {print $4}')
-    css=$(echo  "$output" | awk '/CSR SpMV serial/     {print $4}')
-    csp=$(echo  "$output" | awk '/CSR SpMV parallel/   {print $4}')
-    dss=$(echo  "$output" | awk '/Dense SpMV serial/   {print $4}')
-    dsp=$(echo  "$output" | awk '/Dense SpMV parallel/ {print $4}')
-    ok=$(echo   "$output" | awk '/Correctness/         {print $2}' | tr -d '[]')
+    cbs=$(echo "$output" | awk '/CSR build serial/    {print $4}')
+    cbp=$(echo "$output" | awk '/CSR build parallel/  {print $4}')
+    css=$(echo "$output" | awk '/CSR SpMV serial/     {print $4}')
+    csp=$(echo "$output" | awk '/CSR SpMV parallel/   {print $4}')
+    dss=$(echo "$output" | awk '/Dense SpMV serial/   {print $4}')
+    dsp=$(echo "$output" | awk '/Dense SpMV parallel/ {print $4}')
+    ok=$(echo  "$output" | awk '/Correctness/         {print $2}' | tr -d '[]')
 
     if [ -z "$cbs" ] || [ -z "$ok" ]; then
         echo "Error: failed to parse output for size=$size sparsity=$sparsity threads=$threads"
-        echo "$output"
-        exit 1
+        echo "$output"; exit 1
     fi
 
     echo "$sweep,$size,$sparsity,$iters,$threads,$repeat,$cbs,$cbp,$css,$csp,$dss,$dsp,$ok" \
@@ -45,7 +45,6 @@ run_ex5() {
     echo "[bench] sweep=$sweep size=$size sparsity=$sparsity threads=$threads repeat=$repeat csr_spmv_parallel=$csp"
 }
 
-# Sweep 1: vary threads (fixed size=2000, sparsity=90, iters=10)
 echo "[bench] sweep 1: varying threads"
 for threads in 1 2 4 8; do
     for repeat in $(seq 1 "$REPEATS"); do
@@ -53,7 +52,6 @@ for threads in 1 2 4 8; do
     done
 done
 
-# Sweep 2: vary sparsity (fixed size=2000, threads=4, iters=10)
 echo "[bench] sweep 2: varying sparsity"
 for sparsity in 0 50 75 90 99; do
     for repeat in $(seq 1 "$REPEATS"); do
@@ -61,7 +59,6 @@ for sparsity in 0 50 75 90 99; do
     done
 done
 
-# Sweep 3: vary matrix size (fixed sparsity=90, threads=4, iters=10)
 echo "[bench] sweep 3: varying size"
 for size in 500 1000 2000 4000; do
     for repeat in $(seq 1 "$REPEATS"); do

@@ -5,7 +5,7 @@ source "$(dirname "$0")/lib.sh"
 
 setup_trap
 require_tools
-require_program "./ex4"
+require_program "ex4"
 
 REPEATS=4
 THREADS="1 2 4 8 16"
@@ -15,6 +15,7 @@ RESULTS_DIR="results/ex4"
 RESULTS_FILE="$RESULTS_DIR/bench_ex4_results.csv"
 SYSTEM_FILE="$RESULTS_DIR/bench_ex4_system.txt"
 
+mkdir -p "$RESULTS_DIR"
 collect_system_info "$SYSTEM_FILE"
 
 echo "mode,threads,iterations,repeat,elapsed,throughput" > "$RESULTS_FILE"
@@ -24,20 +25,19 @@ for iterations in $ITERATIONS; do
     for threads in $THREADS; do
         for mode in $MODES; do
             for repeat in $(seq 1 "$REPEATS"); do
-                output=$(./ex4 "$threads" "$iterations" "$mode")
+                output=$("$BINDIR/ex4" "$threads" "$iterations" "$mode")
 
                 elapsed=$(echo    "$output" | awk '/Elapsed/    {print $2}')
                 throughput=$(echo "$output" | awk '/Throughput/ {print $2}')
 
                 if [ -z "$elapsed" ] || [ -z "$throughput" ]; then
                     echo "Error: failed to parse output for mode=$mode threads=$threads iterations=$iterations"
-                    echo "$output"
-                    exit 1
+                    echo "$output"; exit 1
                 fi
 
                 echo "$mode,$threads,$iterations,$repeat,$elapsed,$throughput" \
                     >> "$RESULTS_FILE"
-                echo "[bench] mode=$mode threads=$threads iterations=$iterations repeat=$repeat elapsed=$elapsed throughput=${throughput}M"
+                echo "[bench] mode=$mode threads=$threads iterations=$iterations repeat=$repeat elapsed=$elapsed"
             done
         done
     done

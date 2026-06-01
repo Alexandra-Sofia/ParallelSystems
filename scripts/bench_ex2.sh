@@ -5,7 +5,7 @@ source "$(dirname "$0")/lib.sh"
 
 setup_trap
 require_tools
-require_program "./ex2"
+require_program "ex2"
 
 REPEATS=4
 THREADS="1 2 4 8"
@@ -15,6 +15,7 @@ RESULTS_DIR="results/ex2"
 RESULTS_FILE="$RESULTS_DIR/bench_ex2_results.csv"
 SYSTEM_FILE="$RESULTS_DIR/bench_ex2_system.txt"
 
+mkdir -p "$RESULTS_DIR"
 collect_system_info "$SYSTEM_FILE"
 
 echo "mode,threads,iterations,repeat,elapsed,correctness" > "$RESULTS_FILE"
@@ -24,16 +25,15 @@ for iterations in $ITERATIONS; do
     for threads in $THREADS; do
         for mode in $MODES; do
             for repeat in $(seq 1 "$REPEATS"); do
-                output=$(./ex2 "$threads" "$iterations" "$mode")
+                output=$("$BINDIR/ex2" "$threads" "$iterations" "$mode")
 
-                elapsed=$(echo    "$output" | awk '/Elapsed/     {print $2}')
-                ok=$(echo         "$output" | awk '/Correctness/ {print $2}' \
+                elapsed=$(echo "$output" | awk '/Elapsed/     {print $2}')
+                ok=$(echo      "$output" | awk '/Correctness/ {print $2}' \
                      | tr -d '[]')
 
                 if [ -z "$elapsed" ] || [ -z "$ok" ]; then
                     echo "Error: failed to parse output for mode=$mode threads=$threads iterations=$iterations"
-                    echo "$output"
-                    exit 1
+                    echo "$output"; exit 1
                 fi
 
                 echo "$mode,$threads,$iterations,$repeat,$elapsed,$ok" \
