@@ -18,7 +18,7 @@ SYSTEM_FILE="$RESULTS_DIR/bench_ex3_system.txt"
 mkdir -p "$RESULTS_DIR"
 collect_system_info "$SYSTEM_FILE"
 
-echo "sweep,scheme,threads,read_pct,read_work_iters,repeat,elapsed,correctness" \
+echo "sweep,accounts,scheme,threads,read_pct,read_work_iters,repeat,elapsed,correctness" \
     > "$RESULTS_FILE"
 
 run_ex3() {
@@ -36,8 +36,8 @@ run_ex3() {
         echo "$output"; exit 1
     fi
 
-    echo "$sweep,$scheme,$threads,$read_pct,$work,$repeat,$elapsed,$ok" \
-        >> "$RESULTS_FILE"
+echo "$sweep,$accounts,$scheme,$threads,$read_pct,$work,$repeat,$elapsed,$ok" \
+    >> "$RESULTS_FILE"
     echo "[bench] sweep=$sweep accounts=$accounts scheme=$scheme threads=$threads read_pct=$read_pct work=$work repeat=$repeat elapsed=$elapsed"
 }
 
