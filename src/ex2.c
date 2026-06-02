@@ -27,10 +27,6 @@
 #define MAX_THREADS    256
 #define MAX_ITERATIONS 1000000000LL
 
-/* -------------------------------------------------------------------------
- * Timing helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Return the current monotonic time in seconds.
  *
@@ -43,19 +39,11 @@ static double now(void)
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-/* -------------------------------------------------------------------------
- * Shared state
- * ---------------------------------------------------------------------- */
-
 /** Shared counter, reset to zero by main before each run. */
 static long long shared_counter = 0;
 
 static pthread_mutex_t  mutex  = PTHREAD_MUTEX_INITIALIZER;
 static pthread_rwlock_t rwlock = PTHREAD_RWLOCK_INITIALIZER;
-
-/* -------------------------------------------------------------------------
- * Data types
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Synchronisation strategies available to the worker threads.
@@ -76,10 +64,6 @@ typedef enum {
 typedef struct {
     long long iterations; /**< Number of increments this thread performs. */
 } counter_args_t;
-
-/* -------------------------------------------------------------------------
- * Input parsing
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Parse a string as a positive integer using strtol.
@@ -170,10 +154,6 @@ static int parse_args(int argc, char *argv[], int *num_threads,
     return 1;
 }
 
-/* -------------------------------------------------------------------------
- * Allocation helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Allocate memory and exit on failure.
  *
@@ -190,10 +170,6 @@ static void *xmalloc(size_t n, size_t size)
     }
     return ptr;
 }
-
-/* -------------------------------------------------------------------------
- * Worker threads
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Thread function: increment the shared counter using a mutex.
@@ -252,10 +228,6 @@ static void *worker_atomic(void *arg)
     }
     return NULL;
 }
-
-/* -------------------------------------------------------------------------
- * Entry point
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Program entry point.

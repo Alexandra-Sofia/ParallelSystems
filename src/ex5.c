@@ -33,10 +33,6 @@
 #define MAX_SIZE 20000
 #define MAX_THREADS 256
 
-/* -------------------------------------------------------------------------
- * Timing helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Return the current monotonic time in seconds.
  *
@@ -48,10 +44,6 @@ static double now(void)
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
-
-/* -------------------------------------------------------------------------
- * CSR data structure
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Compressed Sparse Row representation of a matrix.
@@ -69,10 +61,6 @@ typedef struct {
     int n;        /**< Matrix dimension (square: n x n). */
     int nnz;      /**< Total number of non-zero elements. */
 } csr_matrix_t;
-
-/* -------------------------------------------------------------------------
- * Input parsing
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Parse a string as a positive integer using strtol.
@@ -168,10 +156,6 @@ static int parse_args(int argc, char *argv[],
     return 1;
 }
 
-/* -------------------------------------------------------------------------
- * Allocation helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Allocate memory and exit on failure.
  *
@@ -205,10 +189,6 @@ static void *xcalloc(size_t n, size_t size)
     }
     return ptr;
 }
-
-/* -------------------------------------------------------------------------
- * Matrix and vector generation
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Allocate and fill a random sparse integer matrix in dense storage.
@@ -249,10 +229,6 @@ static long long *generate_vector(int n)
 
     return vec;
 }
-
-/* -------------------------------------------------------------------------
- * CSR construction — serial
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Build a CSR representation of a dense matrix serially.
@@ -299,10 +275,6 @@ static csr_matrix_t csr_build_serial(int *mat, int n)
 
     return csr;
 }
-
-/* -------------------------------------------------------------------------
- * CSR construction — parallel
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Build a CSR representation of a dense matrix in parallel.
@@ -370,10 +342,6 @@ static void csr_free(csr_matrix_t *csr)
     free(csr->col_idx);
     free(csr->row_ptr);
 }
-
-/* -------------------------------------------------------------------------
- * SpMV kernels
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Serial CSR SpMV: y = A * x.
@@ -462,10 +430,6 @@ static void spmv_dense_parallel(int *mat, long long *x, long long *y, int n,
     }
 }
 
-/* -------------------------------------------------------------------------
- * Verification
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Compare two long long vectors of length n for equality.
  *
@@ -483,10 +447,6 @@ static int vectors_match(long long *a, long long *b, int n)
     }
     return 1;
 }
-
-/* -------------------------------------------------------------------------
- * Entry point
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Program entry point.

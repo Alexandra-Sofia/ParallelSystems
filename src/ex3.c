@@ -44,10 +44,6 @@
 #define MAX_AMOUNT  100
 #define MAX_THREADS 256
 
-/* -------------------------------------------------------------------------
- * Timing helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Return the current monotonic time in seconds.
  *
@@ -60,10 +56,6 @@ static double now(void)
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-/* -------------------------------------------------------------------------
- * Locking scheme enumeration
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Available synchronisation strategies.
  */
@@ -74,10 +66,6 @@ typedef enum {
     SCHEME_FINE_RW
 } lock_scheme_t;
 
-/* -------------------------------------------------------------------------
- * Shared bank state
- * ---------------------------------------------------------------------- */
-
 static int *accounts;            /**< Array of account balances. */
 static int num_accounts;         /**< Total number of accounts. */
 static long long initial_total;  /**< Sum of balances at initialisation. */
@@ -86,10 +74,6 @@ static pthread_mutex_t coarse_mutex = PTHREAD_MUTEX_INITIALIZER;
 static pthread_rwlock_t coarse_rw = PTHREAD_RWLOCK_INITIALIZER;
 static pthread_mutex_t *fine_mutexes;
 static pthread_rwlock_t *fine_rwlocks;
-
-/* -------------------------------------------------------------------------
- * Allocation helpers
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Allocate memory and exit on failure.
@@ -107,10 +91,6 @@ static void *xmalloc(size_t n, size_t size)
     }
     return ptr;
 }
-
-/* -------------------------------------------------------------------------
- * Input parsing
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Parse a string as a positive integer using strtol.
@@ -239,10 +219,6 @@ static int parse_args(int argc, char *argv[],
     return 1;
 }
 
-/* -------------------------------------------------------------------------
- * Read work helper
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Simulate computational work inside the read critical section.
  *
@@ -262,10 +238,6 @@ static void read_work(int balance, int read_work_iters, long long *accum)
     }
     *accum += (long long)tmp;
 }
-
-/* -------------------------------------------------------------------------
- * Transaction implementations
- * ---------------------------------------------------------------------- */
 
 static void transfer_coarse_mutex(int src, int dst, int amount)
 {
@@ -340,10 +312,6 @@ static void query_fine_rw(int idx, int read_work_iters, long long *accum)
     read_work(balance, read_work_iters, accum);
     pthread_rwlock_unlock(&fine_rwlocks[idx]);
 }
-
-/* -------------------------------------------------------------------------
- * Thread arguments and worker
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Arguments passed to each bank simulation thread.
@@ -420,10 +388,6 @@ static void *bank_worker(void *arg)
     return NULL;
 }
 
-/* -------------------------------------------------------------------------
- * Verification
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Verify that the total sum of all account balances is unchanged.
  *
@@ -437,10 +401,6 @@ static int verify_total(void)
     }
     return total == initial_total;
 }
-
-/* -------------------------------------------------------------------------
- * Entry point
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Program entry point.

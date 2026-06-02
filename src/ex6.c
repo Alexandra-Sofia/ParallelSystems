@@ -27,10 +27,6 @@
 #define MAX_SIZE 200000000
 #define MAX_THREADS 256
 
-/* -------------------------------------------------------------------------
- * Timing helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Return the current monotonic time in seconds.
  *
@@ -42,10 +38,6 @@ static double now(void)
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
-
-/* -------------------------------------------------------------------------
- * Input parsing
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Parse a string as a positive integer using strtol.
@@ -135,10 +127,6 @@ static int parse_args(int argc, char *argv[], int *n, const char **mode,
     return 1;
 }
 
-/* -------------------------------------------------------------------------
- * Allocation helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Allocate memory and exit on failure.
  *
@@ -157,10 +145,6 @@ static void *xmalloc(size_t n, size_t size)
 
     return ptr;
 }
-
-/* -------------------------------------------------------------------------
- * Array generation and verification
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Fill an integer array with deterministic pseudo-random values.
@@ -194,10 +178,6 @@ static int is_sorted(const int *arr, int n)
 
     return 1;
 }
-
-/* -------------------------------------------------------------------------
- * Merge step
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Merge two adjacent sorted subarrays into arr.
@@ -244,10 +224,6 @@ static void merge(int *arr, int *aux, int left, int mid, int right)
     }
 }
 
-/* -------------------------------------------------------------------------
- * Serial mergesort
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Sort arr[left..right] using serial top-down mergesort.
  *
@@ -268,10 +244,6 @@ static void mergesort_serial(int *arr, int *aux, int left, int right)
     mergesort_serial(arr, aux, mid + 1, right);
     merge(arr, aux, left, mid, right);
 }
-
-/* -------------------------------------------------------------------------
- * Parallel mergesort with OpenMP tasks
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Sort arr[left..right] using OpenMP tasks.
@@ -308,10 +280,6 @@ static void mergesort_parallel(int *arr, int *aux, int left, int right,
     #pragma omp taskwait
     merge(arr, aux, left, mid, right);
 }
-
-/* -------------------------------------------------------------------------
- * Entry point
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Program entry point.

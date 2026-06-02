@@ -33,10 +33,6 @@
 #define MAX_THREADS    256
 #define MAX_ITERATIONS 100000000
 
-/* -------------------------------------------------------------------------
- * Timing helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Return the current monotonic time in seconds.
  *
@@ -49,10 +45,6 @@ static double now(void)
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-/* -------------------------------------------------------------------------
- * Barrier mode enumeration
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Which barrier implementation to benchmark.
  */
@@ -61,10 +53,6 @@ typedef enum {
     BARRIER_CONDVAR,
     BARRIER_SENSE
 } barrier_mode_t;
-
-/* -------------------------------------------------------------------------
- * Input parsing
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Parse a string as a positive integer using strtol.
@@ -162,10 +150,6 @@ static int parse_args(int argc, char *argv[], int *num_threads, int *iterations,
     return 1;
 }
 
-/* -------------------------------------------------------------------------
- * Allocation helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Allocate memory and exit on failure.
  *
@@ -185,15 +169,7 @@ static void *xmalloc(size_t n, size_t size)
     return ptr;
 }
 
-/* -------------------------------------------------------------------------
- * pthread_barrier_t wrapper
- * ---------------------------------------------------------------------- */
-
 static pthread_barrier_t lib_barrier;
-
-/* -------------------------------------------------------------------------
- * Condition-variable reusable barrier
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Reusable barrier implemented with a mutex and condition variable.
@@ -340,10 +316,6 @@ static void sense_barrier_wait(sense_barrier_t *b)
     }
 }
 
-/* -------------------------------------------------------------------------
- * Thread arguments and worker
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Arguments passed to each worker thread.
  */
@@ -378,10 +350,6 @@ static void *barrier_worker(void *arg)
 
     return NULL;
 }
-
-/* -------------------------------------------------------------------------
- * Entry point
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Program entry point.

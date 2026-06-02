@@ -26,10 +26,6 @@
 #define MAX_THREADS 256
 #define MAX_DEGREE  2000000
 
-/* -------------------------------------------------------------------------
- * Timing helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Return the current monotonic time in seconds.
  *
@@ -42,10 +38,6 @@ static double now(void)
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-/* -------------------------------------------------------------------------
- * Data types
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Arguments passed to each Pthreads worker thread.
  */
@@ -57,10 +49,6 @@ typedef struct {
     int thread_id;     /**< Zero-based index of this thread. */
     int num_threads;   /**< Total number of worker threads. */
 } poly_args_t;
-
-/* -------------------------------------------------------------------------
- * Input parsing
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Parse a string as a positive integer using strtol.
@@ -146,10 +134,6 @@ static int parse_args(int argc, char *argv[], int *degree, const char **mode,
     return 1;
 }
 
-/* -------------------------------------------------------------------------
- * Allocation helpers
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Allocate memory and exit on failure.
  *
@@ -184,10 +168,6 @@ static void *xcalloc(size_t n, size_t size)
     return ptr;
 }
 
-/* -------------------------------------------------------------------------
- * Serial implementation
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Multiply two polynomials using the serial O(n^2) algorithm.
  *
@@ -209,10 +189,6 @@ static void poly_multiply_serial(int *a, int *b, long long *result, int degree)
         }
     }
 }
-
-/* -------------------------------------------------------------------------
- * Pthreads implementation — cyclic distribution
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Worker function executed by each Pthreads thread.
@@ -302,10 +278,6 @@ static void poly_multiply_pthreads(int *a, int *b, long long *result,
     free(args);
 }
 
-/* -------------------------------------------------------------------------
- * OpenMP implementation
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Multiply two polynomials in parallel using OpenMP.
  *
@@ -345,10 +317,6 @@ static void poly_multiply_openmp(int *a, int *b, long long *result, int degree,
     }
 }
 
-/* -------------------------------------------------------------------------
- * Verification
- * ---------------------------------------------------------------------- */
-
 /**
  * @brief Compare two result arrays element-by-element.
  *
@@ -366,10 +334,6 @@ static int results_match(long long *a, long long *b, int size)
     }
     return 1;
 }
-
-/* -------------------------------------------------------------------------
- * Entry point
- * ---------------------------------------------------------------------- */
 
 /**
  * @brief Program entry point.
