@@ -15,7 +15,11 @@ SYSTEM_FILE="$RESULTS_DIR/bench_ex5_system.txt"
 mkdir -p "$RESULTS_DIR"
 collect_system_info "$SYSTEM_FILE"
 
-echo "sweep,size,sparsity,iterations,threads,repeat,csr_build_serial,csr_build_parallel,csr_spmv_serial,csr_spmv_parallel,dense_spmv_serial,dense_spmv_parallel,csr_total_parallel,csr_vs_dense_including_build,correctness"     > "$RESULTS_FILE"
+echo "sweep,size,sparsity,iterations,threads,repeat,\
+csr_build_serial,csr_build_parallel,\
+csr_spmv_serial,csr_spmv_parallel,\
+dense_spmv_serial,dense_spmv_parallel,correctness" \
+    > "$RESULTS_FILE"
 
 run_ex5() {
     local sweep="$1" size="$2" sparsity="$3" iters="$4" threads="$5" repeat="$6"
@@ -31,18 +35,14 @@ run_ex5() {
     dsp=$(echo "$output" | awk '/Dense SpMV parallel/ {print $4}')
     ok=$(echo  "$output" | awk '/Correctness/         {print $2}' | tr -d '[]')
 
-    if [ -z "$cbs" ] || [ -z "$cbp" ] || [ -z "$css" ] ||        [ -z "$csp" ] || [ -z "$dss" ] || [ -z "$dsp" ] || [ -z "$ok" ]; then
+    if [ -z "$cbs" ] || [ -z "$ok" ]; then
         echo "Error: failed to parse output for size=$size sparsity=$sparsity threads=$threads"
-        echo "$output"
-        exit 1
+        echo "$output"; exit 1
     fi
 
-    local csr_total_parallel csr_vs_dense_including_build
-    csr_total_parallel=$(awk -v a="$cbp" -v b="$csp"         'BEGIN { printf "%.6f", a + b }')
-    csr_vs_dense_including_build=$(awk -v d="$dsp" -v c="$csr_total_parallel"         'BEGIN { if (c == 0) print "NA"; else printf "%.3f", d / c }')
-
-    echo "$sweep,$size,$sparsity,$iters,$threads,$repeat,$cbs,$cbp,$css,$csp,$dss,$dsp,$csr_total_parallel,$csr_vs_dense_including_build,$ok"         >> "$RESULTS_FILE"
-    echo "[bench] sweep=$sweep size=$size sparsity=$sparsity threads=$threads repeat=$repeat csr_total_parallel=$csr_total_parallel csr_vs_dense_including_build=$csr_vs_dense_including_build"
+    echo "$sweep,$size,$sparsity,$iters,$threads,$repeat,$cbs,$cbp,$css,$csp,$dss,$dsp,$ok" \
+        >> "$RESULTS_FILE"
+    echo "[bench] sweep=$sweep size=$size sparsity=$sparsity threads=$threads repeat=$repeat csr_spmv_parallel=$csp"
 }
 
 echo "[bench] sweep 1: varying threads"
@@ -63,13 +63,6 @@ echo "[bench] sweep 3: varying size"
 for size in 500 1000 2000 4000; do
     for repeat in $(seq 1 "$REPEATS"); do
         run_ex5 size "$size" 90 10 4 "$repeat"
-    done
-done
-
-echo "[bench] sweep 4: varying SpMV iterations"
-for iters in 1 5 10 20; do
-    for repeat in $(seq 1 "$REPEATS"); do
-        run_ex5 iterations 2000 90 "$iters" 4 "$repeat"
     done
 done
 
