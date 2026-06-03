@@ -1,166 +1,138 @@
-# Handout1 — Programming with Pthreads & OpenMP
+# Parallel Systems — Programming Assignment 1
 
-**Course:** Parallel Computing Systems (M127)  
-**Institution:** Department of Informatics & Telecommunications, University of Athens  
-**Academic Year:** 2025–2026
+This project contains six C implementations for the first programming assignment of Parallel Computing Systems. 
+The exercises cover Pthreads, OpenMP, synchronization, barriers, sparse matrix-vector multiplication, and task-based parallel mergesort.
 
----
 
-## Table of Contents
+## Repository layout
 
-- [Overview](#overview)
-- [Repository Structure](#repository-structure)
-- [Prerequisites](#prerequisites)
-- [Building](#building)
-- [Running the Smoke Test](#running-the-smoke-test)
-- [Exercises](#exercises)
-  - [Ex 1.1 — Polynomial Multiplication](#ex-11--polynomial-multiplication)
-  - [Ex 1.2 — Shared Counter](#ex-12--shared-counter)
-  - [Ex 1.3 — Bank Simulation](#ex-13--bank-simulation)
-  - [Ex 1.4 — Barrier Implementations](#ex-14--barrier-implementations)
-  - [Ex 1.5 — Sparse Matrix-Vector Multiplication](#ex-15--sparse-matrix-vector-multiplication)
-  - [Ex 1.6 — Parallel Mergesort](#ex-16--parallel-mergesort)
-- [Benchmarking](#benchmarking)
-- [Averaging Results](#averaging-results)
-- [Output Format](#output-format)
-- [Design Notes](#design-notes)
-
----
-
-## Overview
-
-This repository contains the implementation for HW1 of the Parallel Computing Systems course. It covers six exercises in parallel programming using **Pthreads** and **OpenMP** in C, along with a structured benchmarking and result-averaging pipeline.
-
-All programs are written in C11, compiled with GCC, and target the department's Linux cluster (`linux01.di.uoa.gr` through `linux30.di.uoa.gr`).
-
----
-
-## Repository Structure
-
-```
-hw1_final/
-├── Makefile                  — builds all executables into bin/
-├── README.md                 — this file
-├── src/                      — C source files, one per exercise
+```text
+.
+├── Makefile
+├── README.md
+├── src/
 │   ├── ex1.c
 │   ├── ex2.c
 │   ├── ex3.c
 │   ├── ex4.c
 │   ├── ex5.c
 │   └── ex6.c
-├── bin/                      — compiled executables (created by make, not versioned)
-│   ├── ex1 … ex6
-├── scripts/                  — benchmarking and averaging scripts
-│   ├── lib.sh                — shared functions sourced by all scripts
-│   ├── bench_ex1.sh … bench_ex6.sh
-│   └── avg_ex1.sh … avg_ex6.sh
+├── scripts/
+│   ├── bench_ex1.sh ... bench_ex6.sh
+│   ├── avg_ex1.sh ... avg_ex6.sh
+│   ├── lib.sh
+│   ├── sysinfo.sh
+│   └── collect_sysinfo.sh
 ├── tests/
-│   └── smoke-test-all.sh     — quick correctness check for all exercises
-├── results/                  — created at runtime by bench scripts, not versioned
-│   └── exN/
-│       ├── bench_exN_results.csv
-│       ├── bench_exN_averages.csv
-│       └── bench_exN_system.txt
-└── reports/                  — report documents, one subfolder per exercise
-    └── exN/
+│   └── smoke-test-all.sh
+└── results/
+    └── ex1/ ... ex6/
 ```
 
-> `bin/` and `results/` are created at runtime and are not included in the repository.
+`src/` contains the actual exercise implementations.  
+`scripts/` contains benchmark and averaging scripts.  
+`tests/` contains a quick smoke test for all exercises.  
+`results/` is where benchmark outputs are written.
 
----
+## Requirements
 
-## Prerequisites
+The code is intended for a Linux system with:
 
-| Requirement | Minimum version | Notes |
-|-------------|----------------|-------|
-| GCC | 9.0 | Must support `-fopenmp` and C11 atomics |
-| GNU Make | 4.0 | |
-| `bc` | any | Used by bench scripts for floating-point averaging |
-| `awk`, `sort` | any | Standard POSIX tools |
+```text
+GCC with OpenMP support
+GNU Make
+bash
+awk
+sort
+Pthreads
+libm
+```
 
-On the department machines all prerequisites are available by default.
+The Makefile compiles with C11, OpenMP, Pthreads, and math-library support.
 
----
+## Build
 
-## Building
-
-All commands must be run from the **project root** (the directory containing `Makefile`).
+Run all commands from the project root, the directory that contains the `Makefile`.
 
 ```bash
-# Build all six executables into bin/
 make
-
-# Remove all compiled binaries
-make clean
-
-# Rebuild from scratch
-make clean && make
 ```
 
-The Makefile compiles with `-O2 -Wall -Wextra -Wpedantic -std=c11 -fopenmp` and links against `-lpthread -lm`. Zero warnings are expected on GCC 13.
+This creates the executables under `bin/`:
 
----
+```text
+bin/ex1
+bin/ex2
+bin/ex3
+bin/ex4
+bin/ex5
+bin/ex6
+```
 
-## Running the Smoke Test
+To clean compiled binaries:
 
-The smoke test builds all executables and runs each with minimal parameters to verify correctness before committing to a full benchmark run.
+```bash
+make clean
+```
+
+To rebuild from scratch:
+
+```bash
+make clean
+make
+```
+
+If the Makefile does not define shortcut targets such as `make ex1`, compile all exercises with `make`, or build an individual binary with:
+
+```bash
+mkdir -p bin
+make bin/ex1
+```
+
+Replace `ex1` with the required exercise number.
+
+## Smoke test
+
+Before running long benchmarks, run the smoke test:
 
 ```bash
 bash tests/smoke-test-all.sh
 ```
 
-Expected output ends with:
+Expected final line:
 
-```
+```text
 [smoke] all tests passed
 ```
 
-> **Note on the sense-reversal barrier (ex4):** the smoke test applies a 10-second timeout to the sense barrier case. On single-core machines the spin-based barrier cannot make progress and the test will print `[SKIP]` for that case. On the multi-core department machines it completes correctly.
+The smoke test rebuilds the project and runs small correctness checks for all supported modes.
 
----
+## Exercise overview
 
-## Exercises
-
-All programs are invoked from the project root using the `bin/` prefix. All programs print timing information to **stdout** and progress information to **stderr**. Benchmark scripts capture only stdout so progress lines do not pollute result files.
-
-Exit codes follow a consistent convention across all exercises:
-
-| Code | Meaning |
-|------|---------|
-| `0` | Success |
-| `1` | Invalid arguments |
-| `2` | Correctness check failed |
-
----
-
-### Ex 1.1 — Polynomial Multiplication
-
-Multiplies two random dense polynomials of degree `n` using a serial O(n²) algorithm and a parallel algorithm (Pthreads or OpenMP). Verifies that both produce identical results.
-
-```
-Usage: bin/ex1 <degree> <pthreads|openmp> <num_threads>
-```
+### Exercise 1 — Polynomial multiplication
 
 ```bash
-# Example
-bin/ex1 100000 pthreads 4
-bin/ex1 100000 openmp 4
+bin/ex1 <degree> <pthreads|openmp> <num_threads>
 ```
 
-**Key design decisions:**
-- Output coefficients are partitioned across threads using **cyclic distribution** to balance load — computing `result[k]` requires `k+1` multiplications for small k, peaking at the midpoint and tapering back. Block distribution would give the middle threads all the heavy work; cyclic gives each thread a balanced mix.
-- No synchronisation is needed: each output coefficient `k` is owned by exactly one thread.
-- OpenMP uses `schedule(static, 1)` to match the cyclic pattern of the Pthreads implementation.
+Example:
 
----
-
-### Ex 1.2 — Shared Counter
-
-All threads increment a shared counter in a tight loop. Three synchronisation approaches are compared: mutex, read-write lock, and GCC atomic fetch-and-add.
-
+```bash
+bin/ex1 10000 pthreads 4
+bin/ex1 10000 openmp 4
 ```
-Usage: bin/ex2 <num_threads> <iterations> <mutex|rwlock|atomic>
+
+This program multiplies two dense random polynomials. It runs a serial baseline and then a parallel implementation selected by the user. The result is checked against the serial result.
+
+The important idea is that every output coefficient can be computed independently. Each thread owns different result positions, so no lock is required for the result array.
+
+### Exercise 2 — Shared counter synchronization
+
+```bash
+bin/ex2 <num_threads> <iterations> <mutex|rwlock|atomic>
 ```
+
+Example:
 
 ```bash
 bin/ex2 4 1000000 mutex
@@ -168,128 +140,133 @@ bin/ex2 4 1000000 rwlock
 bin/ex2 4 1000000 atomic
 ```
 
-**Key design decisions:**
-- `__atomic_fetch_add` with `__ATOMIC_SEQ_CST` maps to a single hardware instruction (LOCK XADD on x86), avoiding OS-level lock overhead entirely.
-- The rwlock is used in write mode for every operation. Since there are no concurrent readers, it provides no advantage over a mutex and incurs additional bookkeeping overhead, making it consistently the slowest of the three.
+This program has all threads increment the same shared counter. It compares three synchronization methods: mutex, rwlock in write mode, and GCC atomic operations.
 
----
+The expected result is deterministic:
 
-### Ex 1.3 — Bank Simulation
-
-Simulates concurrent bank transactions (money transfers and balance queries) on a shared account array. Four locking schemes are compared across two granularities and two lock types.
-
+```text
+final counter = num_threads * iterations
 ```
-Usage: bin/ex3 <num_accounts> <transactions_per_thread> <read_pct>
-               <coarse_mutex|fine_mutex|coarse_rw|fine_rw>
-               <num_threads> <read_work_iters>
-```
+
+The atomic version is expected to be fastest for this specific workload, because the operation is only a simple increment. 
+The rwlock version is expected to be slower because every operation is a write, so the read-sharing advantage of rwlocks is not used.
+
+### Exercise 3 — Bank simulation
 
 ```bash
-# 80% reads, fine-grained rwlock, extended read section
+bin/ex3 <num_accounts> <transactions_per_thread> <read_pct> \
+        <coarse_mutex|fine_mutex|coarse_rw|fine_rw> \
+        <num_threads> <read_work_iters>
+```
+
+Example:
+
+```bash
 bin/ex3 1000 10000 80 fine_rw 4 100
 ```
 
-| Parameter | Description |
-|-----------|-------------|
-| `read_pct` | Percentage of transactions that are balance queries `[0, 100]` |
-| `read_work_iters` | Number of `sqrt` iterations inside the read critical section; controls its duration |
+This program simulates a bank account array. Threads perform two kinds of transactions:
 
-**Key design decisions:**
-- Fine-grained locks always acquired in **ascending account index order** to prevent deadlock when two threads attempt a transfer between the same pair of accounts in opposite directions.
-- `read_work_iters` makes the rwlock advantage observable: with trivially short read sections the overhead of rwlock bookkeeping dominates. With longer read sections, the ability for multiple readers to proceed concurrently outweighs that overhead.
-- Correctness is verified by checking that the total sum of all account balances is unchanged after all transactions complete.
-
----
-
-### Ex 1.4 — Barrier Implementations
-
-Three reusable barrier implementations are benchmarked: the POSIX library barrier, a condvar-based barrier, and a sense-reversal centralised barrier.
-
+```text
+money transfer: move money from one account to another
+balance query: read one account balance
 ```
-Usage: bin/ex4 <num_threads> <iterations> <pthreads|condvar|sense>
+
+The four synchronization schemes are:
+
+```text
+coarse_mutex  -> one global mutex
+fine_mutex    -> one mutex per account
+coarse_rw     -> one global read-write lock
+fine_rw       -> one read-write lock per account
 ```
+
+Fine-grained transfers lock the two involved accounts in increasing account-index order. This prevents deadlock.
+
+Correctness is checked by verifying that the total amount of money in all accounts is unchanged after all transactions.
+
+`read_work_iters` increases the amount of work done inside read critical sections. This is useful for showing when rwlocks become beneficial: they help more when the workload is read-heavy and each read section lasts longer.
+
+### Exercise 4 — Barrier implementations
 
 ```bash
-bin/ex4 8 1000000 pthreads
-bin/ex4 8 1000000 condvar
-bin/ex4 8 1000000 sense
+bin/ex4 <num_threads> <iterations> <pthreads|condvar|sense>
 ```
 
-**Key design decisions:**
-
-| Implementation | Mechanism | Reusable | Busy-wait |
-|---------------|-----------|----------|-----------|
-| `pthreads` | `pthread_barrier_t` | Yes | OS-dependent |
-| `condvar` | mutex + condition variable + phase flip | Yes | No |
-| `sense` | atomic countdown + thread-local sense flag | Yes | Yes |
-
-- The condvar barrier's **phase flip** (alternating between 0 and 1 each pass) is what makes it reusable without a reset step: threads in the next pass wait for the new phase value, which is unambiguous from the previous one.
-- The sense-reversal barrier uses `__atomic_sub_fetch` with `__ATOMIC_ACQ_REL` on the arrival counter, eliminating the need for a mutex in the critical path entirely.
-- The sense barrier is faster than condvar when threads ≤ cores and barrier waits are short. When threads > cores, spinning is harmful: waiting threads consume CPU time that the last arriving thread needs to reach the barrier. The benchmark includes 16 threads to demonstrate this regime.
-
----
-
-### Ex 1.5 — Sparse Matrix-Vector Multiplication
-
-Constructs a random sparse matrix in CSR (Compressed Sparse Row) format and performs repeated SpMV iterations. Four timing paths are measured: serial and parallel CSR build, serial and parallel SpMV, with a dense baseline for comparison.
-
-```
-Usage: bin/ex5 <matrix_size> <sparsity_pct> <iterations> <num_threads>
-```
+Example:
 
 ```bash
-# 2000×2000 matrix, 90% zeros, 10 SpMV iterations, 4 threads
+bin/ex4 4 1000000 pthreads
+bin/ex4 4 1000000 condvar
+bin/ex4 4 1000000 sense
+```
+
+This program compares three reusable barriers:
+
+```text
+pthreads -> pthread_barrier_t
+condvar  -> custom mutex + condition-variable barrier
+sense    -> custom sense-reversal centralized barrier
+```
+
+The condition-variable barrier blocks waiting threads. The sense-reversal barrier uses atomic operations and spinning. The sense-reversal version can be fast when enough cores are available, but oversubscription can hurt because spinning threads consume CPU time.
+
+### Exercise 5 — Sparse matrix-vector multiplication
+
+```bash
+bin/ex5 <matrix_size> <sparsity_pct> <iterations> <num_threads>
+```
+
+Example:
+
+```bash
 bin/ex5 2000 90 10 4
 ```
 
-| Parameter | Description |
-|-----------|-------------|
-| `sparsity_pct` | Percentage of zero elements `[0, 99]` |
-| `iterations` | Number of SpMV repetitions; each iteration's output is the next iteration's input |
+This program builds a sparse matrix in CSR format and compares sparse matrix-vector multiplication against dense matrix-vector multiplication.
 
-**CSR format:**
+CSR uses three arrays:
 
-| Array | Size | Content |
-|-------|------|---------|
-| `values` | nnz | Non-zero element values |
-| `col_idx` | nnz | Column index of each non-zero |
-| `row_ptr` | n+1 | `row_ptr[i]` = start of row i in values/col_idx |
-
-**Key design decisions:**
-- CSR construction uses a **two-pass parallel approach**: count nnz per row in parallel, compute `row_ptr` via serial prefix sum (O(n), negligible), fill `values` and `col_idx` in parallel.
-- The serial prefix sum step is intentional: a parallel prefix scan would require a reduction tree and synchronisation barriers, with negligible benefit for the sizes benchmarked.
-- SpMV is trivially parallel — each row is an independent dot product with no shared writes.
-- All vectors are `long long` to prevent overflow during iterative multiplication.
-
----
-
-### Ex 1.6 — Parallel Mergesort
-
-Top-down recursive mergesort parallelised with OpenMP tasks. A cutoff threshold prevents task creation overhead from dominating on small subarrays.
-
+```text
+values  -> non-zero values
+col_idx -> column index for each non-zero value
+row_ptr -> start/end offsets for each row
 ```
-Usage: bin/ex6 <array_size> <serial|parallel> <num_threads>
+
+The program includes serial and parallel versions for CSR construction and SpMV. For repeated multiplication, the output vector of one iteration becomes the input vector of the next iteration.
+
+When reporting performance, compare:
+
+```text
+parallel CSR total = CSR build parallel + CSR SpMV parallel
 ```
+
+against dense SpMV. This matters because CSR has a construction cost.
+
+### Exercise 6 — OpenMP task mergesort
+
+```bash
+bin/ex6 <array_size> <serial|parallel> <num_threads>
+```
+
+Example:
 
 ```bash
 bin/ex6 10000000 serial 1
 bin/ex6 10000000 parallel 4
 ```
 
-**Key design decisions:**
-- A single auxiliary array (`aux`) is allocated once and passed through all recursive calls, avoiding O(n log n) heap allocations across merge steps.
-- `#pragma omp single` around the initial recursive call ensures only one thread spawns the top-level tasks; without it, every thread in the parallel region would independently start sorting the full array.
-- The `if()` clause on `#pragma omp task` lets the OpenMP runtime execute small subarrays inline rather than spawning a task, which would have higher overhead than the sort itself.
-- The default cutoff is `10000` elements. Below this threshold the overhead of task creation exceeds the parallelism benefit and the serial path is taken.
+This program implements top-down mergesort. The parallel version uses OpenMP tasks for recursive halves of the array.
 
----
+A cutoff is used so that small subarrays are sorted serially instead of creating too many tiny tasks. This avoids task-creation overhead.
 
-## Benchmarking
+Correctness is checked by verifying that the final array is sorted.
 
-All bench scripts must be run from the **project root**. Results are written to `results/exN/` which is created automatically on first run.
+## Benchmarks
+
+Each exercise has a benchmark script:
 
 ```bash
-# Run all benchmarks (one at a time — do not run concurrently on shared machines)
 bash scripts/bench_ex1.sh
 bash scripts/bench_ex2.sh
 bash scripts/bench_ex3.sh
@@ -298,30 +275,20 @@ bash scripts/bench_ex5.sh
 bash scripts/bench_ex6.sh
 ```
 
-Each script:
-1. Verifies the corresponding binary exists in `bin/`
-2. Collects system information (hostname, CPU model, core count, OS, kernel, compiler) into `bench_exN_system.txt`
-3. Runs the experiment grid with `REPEATS=4` repetitions per configuration
-4. Writes one raw CSV row per repetition to `bench_exN_results.csv`
+Each benchmark writes raw CSV results and system information under `results/exN/`.
 
-> **Important:** Run benchmarks during off-peak hours on the department machines. The `linux0X` machines are shared; load from other users will skew timing results. If a single run looks like an outlier, discard it and rerun.
+Example for exercise 3:
 
-### Benchmark parameters
+```text
+results/ex3/bench_ex3_results.csv
+results/ex3/bench_ex3_system.txt
+```
 
-| Exercise | Key sweep variables |
-|----------|-------------------|
-| ex1 | degree × threads × mode (pthreads, openmp) |
-| ex2 | iterations × threads × mode (mutex, rwlock, atomic) |
-| ex3 | read_pct, threads, read_work_iters × scheme |
-| ex4 | iterations × threads × mode (pthreads, condvar, sense) |
-| ex5 | threads, sparsity, matrix size |
-| ex6 | array size × threads |
+The benchmark scripts also record the machine information used for that exercise, such as hostname, CPU model, core/thread count, OS, kernel, and compiler.
 
----
+## Averaging benchmark results
 
-## Averaging Results
-
-After each bench script completes, run the corresponding averaging script to collapse the raw per-repeat rows into a single averaged row per configuration:
+After running a benchmark, run the corresponding averaging script:
 
 ```bash
 bash scripts/avg_ex1.sh
@@ -332,76 +299,54 @@ bash scripts/avg_ex5.sh
 bash scripts/avg_ex6.sh
 ```
 
-Each script writes `bench_exN_averages.csv` to the same `results/exN/` directory.
+This creates files like:
 
----
-
-## Output Format
-
-### stdout (captured by bench scripts)
-
-Each program prints labelled fields on separate lines, for example:
-
-```
-Serial time:   0.341200 s
-Parallel time: 0.087300 s  [pthreads, 4 threads]
-Speedup:       3.91x
-Correctness:   [OK]
-```
-
-### stderr (progress, not captured)
-
-```
-[ex1] degree=100000 mode=pthreads threads=4
-[ex1] running serial multiply...
-[ex1] serial done (0.341200 s)
-[ex1] running parallel multiply...
-[ex1] parallel done (0.087300 s)
-[ex1] verifying results...
-```
-
-### CSV result files
-
-Raw results contain one row per repeat. Example for ex1:
-
-```csv
-degree,mode,threads,repeat,serial_time,parallel_time,speedup,correctness
-100000,pthreads,4,1,0.341200,0.087300,3.908,OK
-100000,pthreads,4,2,0.338900,0.086100,3.936,OK
+```text
+results/ex1/bench_ex1_averages.csv
+results/ex2/bench_ex2_averages.csv
 ...
 ```
 
-Averaged results contain one row per configuration:
+Use the average CSV files for report tables and plots. Keep the raw CSV files as supporting data.
 
-```csv
-degree,mode,threads,avg_serial,avg_parallel,avg_speedup
-100000,pthreads,4,0.340050,0.086700,3.922
+## Recommended workflow
+
+For each exercise:
+
+```bash
+make clean
+make
+bash tests/smoke-test-all.sh
+bash scripts/bench_exN.sh
+bash scripts/avg_exN.sh
 ```
 
----
+Replace `N` with the exercise number.
 
-## Design Notes
 
-### Shared shell library (`scripts/lib.sh`)
+## Output and exit codes
 
-All bench and avg scripts source `lib.sh`, which provides:
+Most programs print progress messages to `stderr` and final results to `stdout`.
 
-| Function | Purpose |
-|----------|---------|
-| `setup_trap` | Kills child processes cleanly on Ctrl+C |
-| `require_tools` | Aborts if `bc`, `awk`, or `sort` are missing |
-| `require_program` | Aborts with a clear message if `bin/exN` is not built |
-| `collect_system_info` | Writes machine specs to a text file |
-| `avg_csv` | Generic awk-based averaging, configured per exercise via column indices |
+Common exit codes:
 
-### Compiler flags
-
-```
--O2 -Wall -Wextra -Wpedantic -std=c11 -fopenmp -lpthread -lm
+```text
+0 -> success
+1 -> invalid arguments or runtime setup error
+2 -> correctness check failed
 ```
 
-`-O2` is used rather than `-O3` to keep results reproducible and comparable with the department's reference environment.
+Benchmark scripts parse the `stdout` timing lines and correctness lines.
 
-### Input validation
+## Practical notes
 
-All programs use `strtol` / `strtoll` for argument parsing rather than `atoi` / `atoll`. This catches: non-numeric input, trailing garbage, overflow, negative values, and zero. Every `malloc` and `calloc` call is checked via `xmalloc` / `xcalloc` helpers that print a descriptive error and call `exit(1)` on failure. All `pthread_create` and `pthread_join` calls check return codes and exit on error.
+Some benchmark inputs are intentionally large and may take a long time. In particular:
+
+```text
+ex1 with very high polynomial degree is O(n^2)
+ex5 with large dense matrices uses significant memory
+ex6 with 100,000,000 integers uses significant memory and time
+```
+
+For ex1 bench scripts especially screen or tmux is necessary to keep the process alive in the background even after the ssh connection gets a timeout.
+
